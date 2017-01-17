@@ -1,0 +1,37 @@
+#! /usr/bin/env bash
+
+# DESCRIPTION
+# Installations of apps and extensions with cask.
+
+# EXECUTION
+
+source "$MAC_OS_CONFIG_PATH/lib/settings.sh"
+
+# Check if brew is installed and if cask is tapped
+has_brew=$(command -v brew)
+
+if [ -z "$has_brew" ] ; then
+  ruby -e "$(curl --location --fail --silent --show-error https://raw.githubusercontent.com/Homebrew/install/master/install)"
+  export PATH="/usr/local/bin:$PATH"
+fi
+
+has_brew=$(command -v brew)
+has_cask=$(brew tap | grep "caskroom/cask")
+
+if [ ! -z "$has_brew" -a -z "$has_cask" ] ; then
+  printf "Cask can't be found, tap it...\n"
+  eval "brew tap caskroom/cask"
+fi
+
+has_cask=$(brew tap | grep "caskroom/cask")
+
+# Install Cask apps
+if [ ! -z "$has_brew" -a ! -z "$has_cask" ] ; then
+  printf "Install Apps from Cask...\n"
+  for cask_app in "${CASK_APPS[@]}"
+  do
+    eval "brew cask install $cask_app"
+  done
+else
+  printf "Homebrew and / or cask can't be found, cask applications won't be installed.\n"
+fi

@@ -3,6 +3,8 @@
 # DESCRIPTION
 # Sets up and launches (if necessary) installed software.
 
+source "$MAC_OS_CONFIG_PATH/lib/settings.sh"
+
 # Bash
 sudo bash -c "printf '/usr/local/bin/bash\n' >> /etc/shells"
 
@@ -10,10 +12,51 @@ sudo bash -c "printf '/usr/local/bin/bash\n' >> /etc/shells"
 chsh -s /usr/local/bin/bash
 
 # Homebrew
+printf '# Homebrew bin
+export PATH="/usr/local/bin:$PATH"
+export PATH="/usr/local/sbin:$PATH"\n\n' >> $HOME/.bash_profile
 (
   cd /usr/local/Homebrew
   git config --local core.hooksPath /dev/null
 )
+
+# GNU utils without the g prefix
+printf '# Updated GNU utils without the g prefix and man
+export PATH="/usr/local/opt/coreutils/libexec/gnubin:$PATH"
+export MANPATH="/usr/local/opt/coreutils/libexec/gnuman:$MANPATH"\n\n' >> $HOME/.bash_profile
+
+# GNU findutils without the g prefix
+printf '# Updated GNU findutils without the g prefix and man
+export PATH="/usr/local/opt/findutils/libexec/gnubin:$PATH"
+export MANPATH="/usr/local/opt/findutils/libexec/gnuman:$MANPATH"\n\n' >> $HOME/.bash_profile
+
+# GNU gnu-sed without the g prefix
+printf '# Updated GNU gnu-sed without the g prefix and man
+export PATH="/usr/local/opt/gnu-sed/libexec/gnubin:$PATH"
+export MANPATH="/usr/local/opt/gnu-sed/libexec/gnuman:$MANPATH"\n\n' >> $HOME/.bash_profile
+
+# Bash Completion 2 (for bash 4+)
+printf "# Bash Completion 2
+if [ -f $(brew --prefix)/share/bash-completion/bash_completion ]; then
+  source $(brew --prefix)/share/bash-completion/bash_completion
+fi\n\n" >> $HOME/.bash_profile
+
+# Python
+pip install --upgrade pip setuptools
+brew linkapps python
+
+# Terminal notifier
+brew linkapps terminal-notifier
+
+# Update webdriver manager
+webdriver-manager update
+
+# Disable the gatekeeper
+sudo spctl --master-disable
+
+# Clean cleanup
+brew cleanup
+brew cask cleanup
 
 # Ruby
 printf "%s\n" "---" > "$HOME/.gemrc"
@@ -28,11 +71,175 @@ git clone https://github.com/bkuhlmann/ruby_setup.git
 )
 rm -rf ruby_setup
 
+# Install sass (ruby gem)
+gem install sass
+
+# Install mackup
+pip3 install mackup
+# Fix the python config file to make it work with python3
+# from github https://github.com/lra/mackup/pull/909/files
+cp "$MAC_OS_CONFIG_PATH/lib/config.py" /usr/local/lib/python3.6/site-packages/mackup/config.py
+
+mkdir $HOME/.mackup
+printf "Restoring mackup config files...\n"
+cp "$MAC_OS_CONFIG_PATH/lib/mackup.cfg" $HOME/.mackup.cfg
+cp -R "$MAC_OS_CONFIG_PATH/lib/mackup/." $HOME/.mackup/
+
+# Powerline
+# Install Powerline
+pip install powerline-status
+
+# Setup powerline
+powerline_path=$(pip show powerline-status | grep -oP "(?<=Location: )[^ ]+")
+
+printf "# Powerline
+if [ -f `which powerline-daemon` ]; then
+  powerline-daemon -q -r
+  POWERLINE_BASH_CONTINUATION=1
+  POWERLINE_BASH_SELECT=1
+  source $powerline_path/powerline/bindings/bash/powerline.sh
+fi\n\n" >> $HOME/.bash_profile
+
+mkdir -p ~/.config/powerline
+
+cp -R $powerline_path/powerline/config_files/. ~/.config/powerline/
+
+# Change the config to use the left only theme for shell, to display the git branch in the prompt.
+# Before check if jq has been installed otherwise, install it.
+has_jq=$(command -v jq)
+
+if [ -z "$has_jq" ] ; then
+  eval "brew install jq"
+fi
+
+has_jq=$(command -v jq)
+
+# Update and save the config json file.
+if [ ! -z "$has_jq" ] ; then
+  jq '.ext.shell.theme = "default_leftonly"' ~/.config/powerline/config.json > ~/.config/powerline/tmp.json && mv ~/.config/powerline/tmp.json ~/.config/powerline/config.json
+fi
+
+# Restart the Powerline deamon
+powerline-daemon --replace
+
+# History
+printf "# History
+# keep history up to date, across sessions, in realtime (http://unix.stackexchange.com/a/48113)
+export HISTCONTROL=ignoredups:erasedups         # no duplicate entries
+export HISTSIZE=100000                          # big big history (default is 500)
+export HISTFILESIZE=\$HISTSIZE                   # big big history
+type shopt &> /dev/null && shopt -s histappend  # append to history, don't overwrite it
+
+# Save and reload the history after each command finishes
+export PROMPT_COMMAND=\"history -a; history -c; history -r; \$PROMPT_COMMAND\"
+
+# Don't record some commands
+export HISTIGNORE=\"&:[ ]*:exit:ls:bg:fg:history:clear\"
+
+# Save multi-line commands as one command
+shopt -s cmdhist
+
+# Better cd'ing (not sure that these three works on macos sierra)
+# Case-insensitive globbing (used in pathname expansion)
+shopt -s nocaseglob;
+
+# Correct spelling errors in arguments supplied to cd
+shopt -s cdspell;
+
+# Autocorrect on directory names to match a glob.
+shopt -s dirspell 2> /dev/null\n\n" >> $HOME/.bash_profile
+
+# .inputrc - Tweak the tab completion
+touch $HOME/.inputrc
+printf "# Perform file completion in a case insensitive fashion
+set completion-ignore-case on
+
+# Treat hyphens and underscores as equivalent
+set completion-map-case on
+
+# Display matches for ambiguous patterns at first tab press
+set show-all-if-ambiguous on
+
+# Immediately add a trailing slash when autocompleting symlinks to directories
+set mark-symlinked-directories on
+
+# Use the text that has already been typed as the prefix for searching through
+# commands (basically more intelligent Up/Down behavior)
+\"\e[A\": history-search-backward
+\"\e[B\": history-search-forward
+
+# Do not autocomplete hidden files unless the pattern explicitly begins with a dot
+set match-hidden-files off
+
+# Show all autocomplete results at once
+#set page-completions off
+
+# If there are more than 200 possible completions for a word, ask to show them all
+#set completion-query-items 200
+
+# Show extra file information when completing, like `ls -F` does
+set visible-stats on
+
+# Be more intelligent when autocompleting by also looking at the text after
+# the cursor. For example, when the current line is \"cd ~/src/mozil\", and
+# the cursor is on the \"z\", pressing Tab will not autocomplete it to \"cd
+# ~/src/mozillail\", but to \"cd ~/src/mozilla\". (This is supported by the
+# Readline used by Bash 4.)
+set skip-completed-text on
+
+# Allow UTF-8 input and output, instead of showing stuff like $'\0123\0456'
+set input-meta on
+set output-meta on
+set convert-meta off
+
+# Use Alt/Meta + Delete to delete the preceding word
+\"\e[3;3~\": kill-word\n\n" >> $HOME/.inputrc
+
+# Config vim
+touch .vimrc
+printf "syntax on
+set number
+set autoindent
+set cursorline \" Highlight current line
+set hlsearch \" Highlight searches
+set ignorecase \" Ignore case of searches
+set laststatus=2 \" Always show status line
+set backspace=start,eol,indent \" To make the del key work\n\n" >> $HOME/.vimrc
+
+# Aliases
+touch .aliases
+printf "# Finding files with locate and updatedb
+alias customupdatedb='LC_ALL=C sudo updatedb --prunepaths=\"/tmp /var/tmp /.Spotlight-V100 /.fseventsd\"'
+
+# Get week number
+alias week='date +%V'
+
+# Get macOS Software Updates, and update installed Ruby gems, Homebrew, npm, and their installed packages
+alias updateall='sudo softwareupdate -i -a; brew update; brew upgrade; brew cleanup; npm install npm -g; npm update -g; sudo gem update --system; sudo gem update; sudo gem cleanup'
+
+# Clean up LaunchServices to remove duplicates in the “Open With” menu
+alias lscleanup='/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -kill -r -domain local -domain system -domain user && killall Finder'
+
+# Show/hide hidden files in Finder
+alias showhidden='defaults write com.apple.finder AppleShowAllFiles -bool true && killall Finder'
+alias hidehidden='defaults write com.apple.finder AppleShowAllFiles -bool false && killall Finder'
+
+# Git
+alias gf='git fetch'
+alias gc='git checkout'
+alias gpl='git pull'
+alias gps='git push'
+
+alias cask='brew cask'\n\n" >> $HOME/.aliases
+
+# Source .aliases in .bash_profile
+printf "# Load aliases file
+if [ -f \$HOME/.aliases ]; then
+  source \$HOME/.aliases
+fi\n\n" >> $HOME/.bash_profile
+
 # Go
 install_git_project "https://github.com/bkuhlmann/go_setup.git" $REPO_GO_SETUP "go_setup" "bin/run i"
-
-# NPM
-install_git_project "https://github.com/bkuhlmann/npm_setup.git" $REPO_NPM_SETUP "npm_setup" "bin/run i"
 
 # Sublime Text Setup
 if [ ! -e "/usr/bin/sublime" ]; then

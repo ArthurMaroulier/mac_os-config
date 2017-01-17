@@ -1,0 +1,88 @@
+#! /usr/bin/env bash
+
+# DESCRIPTION
+# Updgrade PHP, setup PEAR and install phpcs.
+
+# EXECUTION
+
+source "$MAC_OS_CONFIG_PATH/lib/settings.sh"
+
+# Install a new version of php.
+# Parameters:
+# $1 = The wanted version.
+install_new_php() {
+  local version="$1"
+
+  # Install php
+  printf "Install PHP $version...\n"
+  curl -s https://php-osx.liip.ch/install.sh | bash -s $version
+
+  # Use this PHP version for PHP CLI
+  printf "Use PHP $version for PHP CLI...\n"
+  printf "# PHP $version for PHP CLI\nexport PATH=/usr/local/php5/bin:\$PATH\n\n" >> $HOME/.bash_profile
+
+  printf "Setup PEAR and install PHP Code Sniffer...\n"
+  sudo sed -i '$a include_path = \".:/php/includes:/usr/local/php5/lib/php\"\n\n' /usr/local/php5/php.d/99-liip-developer.ini
+
+  sudo pear install PHP_CodeSniffer
+
+  printf "You can edit the php ini file /usr/local/php5/php.d/99-liip-developer.ini for your personal settings (timezone, module, log, error reporting, ...).\n\n"
+
+  printf "PHP upgrade done.\n\n"
+}
+export -f install_new_php
+
+php_version=$(php -v)
+
+printf "The current version of PHP installed on this mac is:\n$php_version\n\n"
+printf "(see latest releases available here https://php-osx.liip.ch/#latest)\n\n"
+read -p "Do you want to upgrade it ? (y/n) " clean_response
+if [[ $clean_response =~ ^([yY][eE][sS]|[yY])$ ]]; then
+  prompt="Which version of PHP do you want to install ?"
+  options=("7.1" "7.0" "5.6" "5.5" "5.4")
+
+  PS3="$prompt "
+  select opt in "${options[@]}" "None" ; do
+    # opt is the options value corresponding the selected option
+    # REPLY is the typed in option
+    # ${#options[@]} is the length of the array (notice the #)
+    if (( REPLY == 1 + ${#options[@]} )) ; then
+      break
+    elif (( REPLY > 0 && REPLY <= ${#options[@]} )) ; then
+      install_new_php $opt
+      break
+    else
+      echo "Invalid option. Try another one."
+    fi
+  done
+fi
+
+# Install Composer
+printf "Install Composer and make it accessible globally...\n\n"
+EXPECTED_SIGNATURE=$(wget -q -O - https://composer.github.io/installer.sig)
+php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
+ACTUAL_SIGNATURE=$(php -r "echo hash_file('SHA384', 'composer-setup.php');")
+
+if [ "$EXPECTED_SIGNATURE" != "$ACTUAL_SIGNATURE" ]
+then
+    >&2 echo 'ERROR: Invalid installer signature'
+    rm composer-setup.php
+    exit 1
+fi
+
+php composer-setup.php --quiet
+RESULT=$?
+ok=0
+nok=1
+rm composer-setup.php
+
+if [ "$RESULT" = "$ok" ] ; then
+  printf "Composer is Installed.\n\n"
+elif [ "$RESULT" = "$nok" ] ; then
+  printf "Composer installation failed.\n\n"
+else
+  printf "Something happened during the installation of composer:\n$RESULT"
+fi
+
+# Make composer accessible globally
+mv composer.phar /usr/local/bin/composer

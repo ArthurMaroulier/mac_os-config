@@ -1,0 +1,68 @@
+#! /usr/bin/env bash
+
+# DESCRIPTION
+# Copy backup ssh files, restore rights on them and add ssh-add to .bash_profile
+
+source "$MAC_OS_CONFIG_PATH/lib/settings.sh"
+
+# List the files of the given directory and ask which one is the
+# wanted file to set the given rights to
+# Parameters:
+# $1 = The path to scan.
+# $2 = The wanted file.
+# $3 = The wanted right.
+reset_right() {
+  local path_to_scan="$1"
+  local wanted_file="$2"
+  local wanted_right="$3"
+  local current_list=$(ls -al $path_to_scan | grep ^-)
+
+  printf "\n\nRestore rights on $wanted_file file...\n"
+  printf "Current files and rights in $path_to_scan:\n$current_list\n\n"
+
+  prompt="Which of these correspond to your $wanted_file file ?"
+  options=( $(find -P $path_to_scan -mindepth 1 -maxdepth 1 -type f -print0 | xargs -0) )
+
+  PS3="$prompt "
+  select opt in "${options[@]}" "None" ; do
+    # opt is the options value corresponding the selected option
+    # REPLY is the typed in option
+    # ${#options[@]} is the length of the array (notice the #)
+    if (( REPLY == 1 + ${#options[@]} )) ; then
+      break
+    elif (( REPLY > 0 && REPLY <= ${#options[@]} )) ; then
+      if [ -e $opt -a -f $opt ] ; then
+        printf "Setting appropriate rights on $opt...\n"
+        chmod $wanted_right $opt
+      fi
+      break
+    else
+      echo "Invalid option. Try another one."
+    fi
+  done
+}
+export -f reset_right
+
+if [[ -d SSH_BACKUP_DIRECTORY ]] ; then
+  if [[ ! -d $HOME/.ssh ]] ; then
+    mkdir $HOME/.ssh
+  fi
+
+  # Copy files from backup
+  printf "Copy ssh files from backup directory inside .ssh directory...\n"
+  cp -R SSH_BACKUP_DIRECTORY/. $HOME/.ssh/
+
+  # Restore rights
+  printf "Setting appropriate rights on .ssh directory..."
+  chmod 755 .ssh
+
+  reset_right $HOME/.ssh/ "private key" 600
+  reset_right $HOME/.ssh/ "public key" 644
+  reset_right $HOME/.ssh/ "known hosts" 644
+  reset_right $HOME/.ssh/ "config" 644
+
+  printf "Add ssh-add to bash_profile...\n"
+  printf "# Add ssh identity\nssh-add\n\n" >> $HOME/.bash_profile
+else
+  printf "WARNING: the ssh backup directory does not exist or the corresponding volume is not accessible, you can set it in the settings file.\n"
+fi

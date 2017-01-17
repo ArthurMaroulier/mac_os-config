@@ -1,0 +1,33 @@
+#! /usr/bin/env bash
+
+# DESCRIPTION
+# Installations of NodeJs npm modules.
+
+source "$MAC_OS_CONFIG_PATH/lib/settings.sh"
+
+# Check if node and npm is installed
+has_brew=$(command -v brew)
+has_npm=$(command -v npm)
+
+if [ -z "$has_npm" ] ; then
+  printf "Npm can't be found, installation of node with npm...\n"
+  if [ -z "$has_brew" ] ; then
+    ruby -e "$(curl --location --fail --silent --show-error https://raw.githubusercontent.com/Homebrew/install/master/install)"
+    export PATH="/usr/local/bin:$PATH"
+  fi
+
+  eval "brew install node"
+fi
+
+has_npm=$(command -v npm)
+
+# Install NPM modules
+if [ ! -z "$has_npm" ] ; then
+  printf "Install NodeJs software from npm...\n"
+  for npm_module in "${NPM_MODULES[@]}"
+  do
+    eval "npm install $npm_module"
+  done
+else
+  printf "Npm can't be found, NodeJs npm software won't be installed.\n"
+fi
